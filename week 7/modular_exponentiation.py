@@ -13,7 +13,7 @@ class ModuloArray:
         self.array.append(int)
 
     def __getitem__(self, idx) -> int:
-        if idx > len(self.array):
+        if idx > len(self.array) - 1:
             if self.get_ends_one():
                 return 1
             else:
@@ -69,8 +69,8 @@ def get_final_mod(exponents, memo: ModuloArray, i1: int, i2: int) -> int:
         return memo[exponent_one] * get_final_mod(exponents, memo, i1+1, i2+1) % memo.get_mod()
     
 
-def squares_modulo(exponents, base, mod, power) -> ModuloArray:
-    memo = ModuloArray(base*base%mod, base, power, mod)
+def squares_modulo(exponents: list[int], base: int, mod: int, power: int, basecase: int) -> ModuloArray:
+    memo = ModuloArray(basecase, base, power, mod)
     curr_idx = 0
     for exponent in exponents:
         while len(memo) - 1 < exponent:
@@ -87,10 +87,9 @@ def squares_modulo(exponents, base, mod, power) -> ModuloArray:
 def modular_exponentiation(base:int, power:int, mod:int) -> int:
     bitarray = get_bitarray_backwards(power)
     exponents = get_modular_exponents(bitarray)
-    memo = squares_modulo(exponents, base, mod, power)
+    memo = squares_modulo(exponents, base, mod, power, base*base%mod)
     return get_final_mod(exponents, memo, 0,1)
 
-print(modular_exponentiation(3,154,13))
             
 
 

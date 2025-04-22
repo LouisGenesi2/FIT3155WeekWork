@@ -1,14 +1,22 @@
 from .CharTable import CharTable
 from .GlobalInt import GlobalInt
 
+
+
+class Node:
+    def __init__(self, is_leaf: bool, value: str):
+        self.is_leaf = is_leaf
+        self.value = value
+
 class UkkonenEdge:
     def __init__(self, value: tuple[int, GlobalInt|int], dest):
         self.value = value
         self.dest = dest
 
     def _update_end_value(self, value: int):
-        old_end_value = 
+        old_end_value = self.value[1]
         self.value = (self.value[0], value)
+        return old_end_value
 
     def _change_dest(self, new_dest: 'CharNode') -> 'CharNode':
         """ Returns old destination
@@ -23,58 +31,20 @@ class UkkonenEdge:
         else:
             raise AssertionError("Only GlobalInt end should be stultified")
         
+    def change_end_value(self, new_value: int) -> int:
+        old_value = self.value[1]
+        self.value[1] = new_value
+        return old_value
+
     def insert_internal_node(self, insert_at: int, new_node: 'CharNode') -> 'CharNode':
         self._update_end_value(insert_at)
         return self._change_dest(new_node)
-
-class UkkonenTree:
-    def __init__(self):
-        self.root: 'CharNode' = CharNode()
-        self.global_int = 0
-        self.active_node = self.root
-        self.pending: 'CharNode'|None = None
-        self.remainder: list[int] = []
-
-
-class SuffixLink(UkkonenEdge):
-    def __init__(self, dest: 'CharNode'):
-        self.dest: 'CharNode' = dest
-
-class Node:
-    def __init__(self, is_leaf: bool, value: str):
-        self.is_leaf = is_leaf
-        self.value = value
-
-class CharNode(Node):
-    """ Tree implemented with CharTable as children for O(1) lookup
-        of children
-    """
-    def __init__(self):
-        self.array: CharTable = CharTable()
-        self.suffix_link: SuffixLink|None = None
     
-    def get_edge(self, direction: str) -> UkkonenEdge:
-        return self.array[direction]
+    def traverse_edge(self) -> 'CharNode':
+        return self.dest
 
-    def has_suffix_link(self) -> bool:
-        return isinstance(self.suffix_link, SuffixLink)
-    
-    def get_UkkonenEdge(self, letter: str) -> UkkonenEdge:
-        return self.array[letter]
-    
-    def insert_internal_node(self, index_to_insert: int, position: int, string: str) -> 'CharNode':
-        direction = string[index_to_insert]
-        relevant_edge = self.get_UkkonenEdge(direction)
-        new_node = CharNode()
-        old_dest = relevant_edge.insert_internal_node(position, new_node)
-        
-        #add new edge between new node and old destination
-        next_direction = string[index_to_insert + 1]
-        new_node.add_UkkonenEdge(next_direction, )
-
-
-    def add_UkkonenEdge(self, letter: str, value: tuple[int, GlobalInt|int], leaf_value):
-        self.array[letter] = UkkonenEdge(value, Node(is_leaf=True, value=leaf_value))
+    def get_length(self) -> int:
+        return self.value[1] - self.value[2]
 
 class BinaryNode(Node):
     def __init__(self, is_leaf: bool, value: str):
@@ -99,3 +69,37 @@ class BinaryNode(Node):
 
     def is_leaf(self):
         return self.is_leaf
+    
+class SuffixLink(UkkonenEdge):
+    def __init__(self, dest: 'CharNode'):
+        self.dest: 'CharNode' = dest
+    
+    def traverse(self) -> 'CharNode':
+        return self.dest
+
+class CharNode(Node):
+    """ Tree implemented with CharTable as children for O(1) lookup
+        of children
+    """
+    def __init__(self):
+        self.array: CharTable[UkkonenEdge] = CharTable()
+        self.suffix_link: SuffixLink|None = None
+    
+    def get_edge(self, direction: str) -> UkkonenEdge:
+        return self.array[direction]
+
+    def add_suffix_link(self, dest: 'CharNode'):
+        self.suffix_link = SuffixLink(dest)
+
+    def has_suffix_link(self) -> bool:
+        return isinstance(self.suffix_link, SuffixLink)
+    
+    def get_UkkonenEdge(self, letter: str) -> UkkonenEdge:
+        return self.array[letter]
+
+
+    def add_UkkonenEdge(self, letter: str, value: tuple[int, GlobalInt|int], dest: Node):
+        self.array[letter] = UkkonenEdge(value, dest)
+
+    def __getitem__(self, item: str) -> UkkonenEdge:
+        self.array[item].get_length()

@@ -24,6 +24,9 @@ class UkkonenEdge:
         old_dest = self.dest
         self.dest = new_dest
         return old_dest
+    
+    def get_values(self) -> tuple[int, int]:
+        return self.value
 
     def stultify_end(self, end_value: int):
         if isinstance(self.value[1], GlobalInt):

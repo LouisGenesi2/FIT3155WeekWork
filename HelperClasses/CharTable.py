@@ -14,8 +14,8 @@ class CharTable:
     def __getitem__(self, char) -> str:
         return self.array[self._get_char_index(char)]
 
-    def __setitem__(self, char):
-        self.array[self._get_char_index(char)]
+    def __setitem__(self, char, value):
+        self.array[self._get_char_index(char)] = value
 
 
 class CharFreqTable(CharTable):

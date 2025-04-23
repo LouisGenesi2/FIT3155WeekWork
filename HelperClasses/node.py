@@ -102,8 +102,8 @@ class CharNode(Node):
         return self.array[letter]
 
 
-    def add_UkkonenEdge(self, letter: str, value: tuple[int, GlobalInt|int], dest: Node):
-        self.array[letter] = UkkonenEdge(value, dest)
+    def add_UkkonenEdge(self, letter: str, value: tuple[int, GlobalInt|int], dest: Node, string_id: int):
+        self.array[letter] = UkkonenEdge(value, dest, string_id)
 
     def __getitem__(self, item: str) -> UkkonenEdge:
         self.array[item].get_length()

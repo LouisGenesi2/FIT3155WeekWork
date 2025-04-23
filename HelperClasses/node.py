@@ -1,17 +1,18 @@
-from .CharTable import CharTable
-from .GlobalInt import GlobalInt
+from CharTable import CharTable
+from GlobalInt import GlobalInt
 
 
 
 class Node:
-    def __init__(self, is_leaf: bool, value: str):
+    def __init__(self, is_leaf: bool, value: str = ''):
         self.is_leaf = is_leaf
         self.value = value
 
 class UkkonenEdge:
-    def __init__(self, value: tuple[int, GlobalInt|int], dest):
+    def __init__(self, value: tuple[int, GlobalInt|int], dest, string_id: int):
         self.value = value
         self.dest = dest
+        self.string_id = string_id
 
     def _update_end_value(self, value: int):
         old_end_value = self.value[1]

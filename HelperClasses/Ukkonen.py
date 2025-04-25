@@ -3,28 +3,37 @@ import typing
 
 
 class UkkonenTree:
-    def __init__(self):
+    def __init__(self) -> None:
         # initialise root
         self.root: 'CharNode' = CharNode()
         self.root.add_suffix_link(self.root)
 
-        self._global_int = 0
+        self._global_int: int = 0
         self._active_node = self.root
         self._pending: 'CharNode'|None = None
         self._remainder: tuple[int, int]|None
 
-        self._curr_string_id = None
-        self.strings = []
+        self._curr_string_id: int|None = None
+        self.strings: list[str] = []
+
+        self._curr_extension: int = 0
+        self._curr_phase: int = 0
 
 
     def _construct_tree(self) -> None:
         self._curr_extension = 0
         self._curr_phase = 0
-        while self._curr_extension <= len(self._get_string(self._curr_string_id)):
+        curr_str_id = self._get_curr_string_id()
+        if curr_str_id is None:
+            return None
+        while self._curr_extension < len(self._get_string(curr_str_id)):
             self._do_extension()
+            if self._curr_extension == self._curr_phase:
+                self._increment_phase()
 
+        return None
 
-    def _do_phase(self):
+    def _do_phase(self) -> None:
         pass
 
     def _do_extension(self) -> None:
@@ -54,12 +63,12 @@ class UkkonenTree:
     @_rule_2
     def _rule_2_r(self, rel_edge: UkkonenEdge, mismatch_idx_road: int, mismatch_idx_dir: int) -> None:
         new_node = self._insert_internal_node(rel_edge, mismatch_idx_road)
-        new_node.add_UkkonenEdge(self._get_letter(mismatch_idx_dir, self._curr_string_id), (mismatch_idx_dir, self._global_int), Node(is_leaf=True), self._curr_string_id)
+        new_node.add_UkkonenEdge(self._get_letter(mismatch_idx_dir, self._get_curr_string_id()), (mismatch_idx_dir, self._global_int), Node(is_leaf=True), self._get_curr_string_id())
         
 
     @_rule_2
     def _rule_2_a(self, rel_node: CharNode, direction_str_idx: int) -> None:
-        rel_node.add_UkkonenEdge(self._get_letter(direction_str_idx, self._curr_string_id), (direction_str_idx, self._global_int), Node(is_leaf=True), self._curr_string_id)
+        rel_node.add_UkkonenEdge(self._get_letter(direction_str_idx, self._get_curr_string_id()), (direction_str_idx, self._global_int), Node(is_leaf=True), self._get_curr_string_id())
 
     def _rule_3(self, *args) -> None:
         self._increment_remainder()
@@ -72,7 +81,10 @@ class UkkonenTree:
     def _follow_suffix_link(self) -> None:
         if self._active_node is self.root:
             self._decrement_remainder(1)
-        self._active_node = self._active_node.suffix_link.traverse()
+        if self._active_node.suffix_link is None:
+            raise ValueError('No suffix link')
+        else:
+            self._active_node = self._active_node.suffix_link.traverse()
 
     def _decrement_remainder(self, amt: int) -> None:
         if self._remainder is None:
@@ -120,7 +132,7 @@ class UkkonenTree:
             rel_edge: UkkonenEdge|None,
             rel_edge_idx: int|None,
             amt_left: int
-        ) -> tuple[typing.Callable[['UkkonenTree'], None],tuple]                                            \
+        ) -> tuple[typing.Callable[['UkkonenTree'], None],tuple]                                                          \
             |tuple[typing.Callable[['UkkonenTree',UkkonenEdge,int,int], None], tuple['UkkonenTree',UkkonenEdge,int,int]]  \
             |tuple[typing.Callable[['UkkonenTree',CharNode,int], None], tuple['UkkonenTree',CharNode,int]]:
         
@@ -147,7 +159,7 @@ class UkkonenTree:
             
 
     def _find_edge_by_idx(self, curr_node: CharNode, idx_to_travel: int) -> UkkonenEdge|None:
-        return curr_node[self._get_letter(idx_to_travel, self._curr_string_id)]
+        return curr_node[self._get_letter(idx_to_travel, self._get_curr_string_id())]
 
         
     def _find_idx_travel_mismatch(self, idx_road: tuple[int, int], idx_direction: tuple[int,int]) -> tuple[bool, int]:
@@ -161,7 +173,7 @@ class UkkonenTree:
         
         length_of_subtring = cut_off - idx_direction[0]     # length of substrings to test
         for offset in range(0, length_of_subtring):
-            if self._get_letter(idx_direction[0] + offset, self._curr_string_id) != self._get_letter(idx_road[0] + offset, self._curr_string_id):
+            if self._get_letter(idx_direction[0] + offset, self._get_curr_string_id()) != self._get_letter(idx_road[0] + offset, self._get_curr_string_id()):
                 return (True, idx_road[idx_road[0] + offset])       # return idx in road where mismatch occurs
             
         return (False, idx_road[0] + length_of_subtring)            
@@ -180,27 +192,27 @@ class UkkonenTree:
     def _update_active_node_w_remainder(self) -> None:
         """ Update active node by traversing remainder and adjusting remainder accordingly
         """
-        if self._check_remainder():
+        rem_check = self._get_remainder()
+        if rem_check is not None:
             self._active_node, _, _, amt_remainder_remaining = self._skip_count(self._active_node, self._remainder)
             remainder_adjustment = self._get_remainder_length() - amt_remainder_remaining
             self._decrement_remainder(remainder_adjustment)
 
 
     def _get_remainder_length(self) -> int:
-        if self._check_remainder():
+        rem_check = self._get_remainder()
+        if rem_check is not None:
             return self._remainder[1] - self._remainder[0]
         return 0
 
     def _get_remainder_letter(self) -> str:
         if self._remainder is None:
             raise 
-        return self._get_letter(self._remainder[0], self._curr_string_id)
+        return self._get_letter(self._remainder[0], self._get_curr_string_id())
     
-    def _check_remainder(self) -> bool:
-        if self._remainder is None:
-            return True
-        return False
-    
+    def _get_remainder(self) -> tuple[int,int]|None:
+        return self._remainder
+
 
     def _get_letter(self, idx: int, string_id: int) -> str:
         return self._get_string(string_id)[idx]
@@ -209,16 +221,16 @@ class UkkonenTree:
         return self.strings[string_id]
 
     def _get_ext_letter(self) -> str:
-        return self._get_letter(self._curr_extension, self._curr_string_id)
+        return self._get_letter(self._curr_extension, self._get_curr_string_id())
 
-    def _increment_extension(self):
+    def _increment_extension(self) -> None:
         self._curr_extension += 1
 
-    def add_string(self, string: str):
-        if self._curr_string_id is None:
-            self._curr_string_id = 0
+    def add_string(self, string: str) -> None:
+        if self._get_curr_string_id() is None:
+            self._set_curr_string_id(0)
         else:
-            self._curr_string_id += 1
+            self._set_curr_string_id(self._get_curr_string_id() + 1)
         self.strings.append(string)
         self._construct_tree()
 
@@ -238,7 +250,7 @@ class UkkonenTree:
         new_node = CharNode()
         node2 = edge._change_dest(new_node)     # old destination
         old_val = edge.change_end_value(pos - 1)    # value before old dest
-        new_node.add_UkkonenEdge(self._get_letter(pos, self._curr_string_id), (pos , old_val), node2, self._curr_string_id)
+        new_node.add_UkkonenEdge(self._get_letter(pos, self._get_curr_string_id()), (pos , old_val), node2, self._get_curr_string_id())
         self._resolve_suffix_link(new_node)
         self._add_pending(new_node)
         return new_node
@@ -254,5 +266,11 @@ class UkkonenTree:
         if isinstance(pending, CharNode):
             new_node.add_suffix_link(pending)
 
+    def _get_curr_string_id(self) -> int|None:
+        return self._curr_string_id
+    
+    def _set_curr_string_id(self, value: int) -> None:
+        self._curr_string_id = value
+    
 j = UkkonenTree()
-j
+j.add_string('aababababhsbs')

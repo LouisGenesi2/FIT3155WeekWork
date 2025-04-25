@@ -1,5 +1,4 @@
 from CharTable import CharTable
-from GlobalInt import GlobalInt
 
 
 
@@ -9,7 +8,7 @@ class Node:
         self.value = value
 
 class UkkonenEdge:
-    def __init__(self, value: tuple[int, GlobalInt|int], dest, string_id: int):
+    def __init__(self, value: tuple[int, int], dest, string_id: int):
         self.value = value
         self.dest = dest
         self.string_id = string_id
@@ -28,16 +27,10 @@ class UkkonenEdge:
     
     def get_values(self) -> tuple[int, int]:
         return self.value
-
-    def stultify_end(self, end_value: int):
-        if isinstance(self.value[1], GlobalInt):
-            self.value[1] = end_value
-        else:
-            raise AssertionError("Only GlobalInt end should be stultified")
         
     def change_end_value(self, new_value: int) -> int:
         old_value = self.value[1]
-        self.value[1] = new_value
+        self.value = (self.value[0], new_value)
         return old_value
 
     def insert_internal_node(self, insert_at: int, new_node: 'CharNode') -> 'CharNode':
@@ -48,7 +41,7 @@ class UkkonenEdge:
         return self.dest
 
     def get_length(self) -> int:
-        return self.value[1] - self.value[2]
+        return self.value[1] - self.value[0]
 
 class BinaryNode(Node):
     def __init__(self, is_leaf: bool, value: str):
@@ -85,14 +78,14 @@ class CharNode(Node):
     """ Tree implemented with CharTable as children for O(1) lookup
         of children
     """
-    def __init__(self):
+    def __init__(self) -> None:
         self.array: CharTable[UkkonenEdge] = CharTable()
         self.suffix_link: SuffixLink|None = None
     
     def get_edge(self, direction: str) -> UkkonenEdge:
         return self.array[direction]
 
-    def add_suffix_link(self, dest: 'CharNode'):
+    def add_suffix_link(self, dest: 'CharNode') -> None:
         self.suffix_link = SuffixLink(dest)
 
     def has_suffix_link(self) -> bool:
@@ -102,8 +95,8 @@ class CharNode(Node):
         return self.array[letter]
 
 
-    def add_UkkonenEdge(self, letter: str, value: tuple[int, GlobalInt|int], dest: Node, string_id: int):
+    def add_UkkonenEdge(self, letter: str, value: tuple[int, int], dest: Node, string_id: int) -> None:
         self.array[letter] = UkkonenEdge(value, dest, string_id)
 
     def __getitem__(self, item: str) -> UkkonenEdge:
-        self.array[item].get_length()
+        return self.array[item]

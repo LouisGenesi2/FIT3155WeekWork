@@ -1,19 +1,19 @@
 from node import CharNode, UkkonenEdge, Node
+from GlobalInt import GlobalInt
 import typing
-
 
 class UkkonenTree:
     def __init__(self) -> None:
         # initialise root
-        self.root: 'CharNode' = CharNode()
+        self.root: 'CharNode' = CharNode('<root>')
         self.root.add_suffix_link(self.root)
 
-        self._global_int: int = 0
+        self._global_int: GlobalInt = GlobalInt(0)
         self._active_node = self.root
         self._pending: 'CharNode'|None = None
-        self._remainder: tuple[int, int]|None
+        self._remainder: tuple[int, int]|None = None
 
-        self._curr_string_id: int|None = None
+        self._curr_string_id: int = 0
         self.strings: list[str] = []
 
         self._curr_extension: int = 0
@@ -23,20 +23,18 @@ class UkkonenTree:
     def _construct_tree(self) -> None:
         self._curr_extension = 0
         self._curr_phase = 0
+        self._add_pending(self.root)
+        
         curr_str_id = self._get_curr_string_id()
-        if curr_str_id is None:
-            return None
-        while self._curr_extension < len(self._get_string(curr_str_id)):
+        while self._curr_extension < len(self._get_string(curr_str_id)) and self._curr_phase < len(self._get_string(curr_str_id)):
             self._do_extension()
-            if self._curr_extension == self._curr_phase:
-                self._increment_phase()
-
         return None
 
     def _do_phase(self) -> None:
         pass
 
     def _do_extension(self) -> None:
+        
         traveled_node, traveled_edge, edge_idx, amt_left = self._skip_count(
             self._active_node,
             (self._curr_extension, self._curr_phase)
@@ -50,8 +48,7 @@ class UkkonenTree:
         rule_to_apply(*args)
 
     def _rule_1(self, *args) -> None:
-        self._increment_global_int()
-        self._increment_extension()
+        raise Exception('Rule 1 should be automatic')
 
     @staticmethod
     def _rule_2(rule_2_version: typing.Callable[['UkkonenTree',UkkonenEdge,int,int], None]|typing.Callable[['UkkonenTree',CharNode,int], None]):
@@ -71,16 +68,15 @@ class UkkonenTree:
         rel_node.add_UkkonenEdge(self._get_letter(direction_str_idx, self._get_curr_string_id()), (direction_str_idx, self._global_int), Node(is_leaf=True), self._get_curr_string_id())
 
     def _rule_3(self, *args) -> None:
-        self._increment_remainder()
+        # self._increment_remainder()
         self._increment_phase()
-        self._increment_global_int()
     
     def _increment_global_int(self) -> None:
-        self._global_int += 1
+        self._global_int.increment_value()
 
     def _follow_suffix_link(self) -> None:
-        if self._active_node is self.root:
-            self._decrement_remainder(1)
+        # if self._active_node is self.root:
+        #     self._decrement_remainder(1)
         if self._active_node.suffix_link is None:
             raise ValueError('No suffix link')
         else:
@@ -101,29 +97,50 @@ class UkkonenTree:
 
     def _skip_count(self, curr_node: CharNode, susbtr_to_travel: tuple[int, int]) -> tuple[CharNode, UkkonenEdge|None, int|None, int]:
         """ Given a starting node and substring of the string to travel along (represented by indices), 
-            return the latest Node you arrive to, the Edge you stop at, what index along that edge you stop at, and the amount
-            of the subtring to travel you have not travelled.
+            return the latest Node you arrive to, the Edge you stop at, what index along that edge you stop at, and the index
+            of the substr_to_travel you need to test
         """
         traveled_node = curr_node
         amt_traveled = 0
-        amt_to_travel = susbtr_to_travel[1] - susbtr_to_travel[0]
-        
-        while amt_traveled < amt_to_travel:
-            idx_to_travel = susbtr_to_travel[0] + amt_traveled
+        amt_to_travel = susbtr_to_travel[1] - susbtr_to_travel[0] + 1
+
+        while amt_to_travel > 0:
+            idx_to_travel = susbtr_to_travel[0] + amt_traveled              # Where you are up to on Direction substr
             edge = self._find_edge_by_idx(traveled_node, idx_to_travel)     # Travel the relevant direction
             if edge is None:                                                # Scenario where direction to travel does not yet exist
-                return traveled_node, None, None, amt_to_travel - amt_traveled
+                dir_stopped = susbtr_to_travel[1]
+                return traveled_node, None, None, dir_stopped
+            edge_length = edge.get_length()
             
-            is_mismatch, last_idx_traveled = self._find_idx_travel_mismatch(idx_road=edge.get_values(), idx_direction=susbtr_to_travel)
-            amt_traveled += last_idx_traveled - edge.get_values()[0]
+            if edge_length < amt_to_travel:
+                traveled_node = edge.traverse_edge()
+                amt_traveled += edge_length
+                amt_to_travel -= edge_length
+            else:
+                idx_stopped = edge.get_values()[0] + amt_to_travel - 1     # Where in the road you stopped
+                dir_stopped = susbtr_to_travel[1]                          # Where in the direction you stopped
+                return traveled_node, edge, idx_stopped, dir_stopped
+        
+        return traveled_node, None, None, susbtr_to_travel[1]
+        
+        # while amt_traveled < amt_to_travel:
+        #     idx_to_travel = susbtr_to_travel[0] + amt_traveled              # Where you are up to on Direction substr
+        #     edge = self._find_edge_by_idx(traveled_node, idx_to_travel)     # Travel the relevant direction
+        #     if edge is None:                                                # Scenario where direction to travel does not yet exist
+        #         return traveled_node, None, None, amt_to_travel - amt_traveled
+        #     is_mismatch, last_idx_traveled = self._find_idx_travel_mismatch(idx_road=edge.get_values(), idx_direction=susbtr_to_travel)
+        #     amt_traveled += last_idx_traveled - edge.get_values()[0] + 1
 
-            if last_idx_traveled < edge.get_values()[1]:                      # scenario where entire edge is not traversed
-                return traveled_node, edge, last_idx_traveled, amt_to_travel - amt_traveled
-            
-            traveled_node = edge.traverse_edge()
+        #     if is_mismatch:                                                 # scenario where entire edge is not traversed
+        #         return traveled_node, edge, last_idx_traveled, amt_to_travel - amt_traveled
+
+        #     traveled_node = edge.traverse_edge()
         
         return traveled_node, None, None, 0                                 # scenario with perfect travel to a node
         # TODO: Ensure that traveled node in perfect traversal includes ending leaf node instantly
+
+    def _do_curr_travel(self)->tuple[CharNode, UkkonenEdge|None, int|None, int]:
+        pass
 
     
     def _get_appropriate_rule(
@@ -131,24 +148,24 @@ class UkkonenTree:
             rel_node: CharNode,
             rel_edge: UkkonenEdge|None,
             rel_edge_idx: int|None,
-            amt_left: int
-        ) -> tuple[typing.Callable[['UkkonenTree'], None],tuple]                                                          \
-            |tuple[typing.Callable[['UkkonenTree',UkkonenEdge,int,int], None], tuple['UkkonenTree',UkkonenEdge,int,int]]  \
-            |tuple[typing.Callable[['UkkonenTree',CharNode,int], None], tuple['UkkonenTree',CharNode,int]]:
+            rel_substr_idx: int
+    ) -> tuple[typing.Callable[['UkkonenTree'], None],tuple]                                                          \
+        |tuple[typing.Callable[['UkkonenTree',UkkonenEdge,int,int], None], tuple['UkkonenTree',UkkonenEdge,int,int]]  \
+        |tuple[typing.Callable[['UkkonenTree',CharNode,int], None], tuple['UkkonenTree',CharNode,int]]:
         
-        direction_to_go = self._curr_phase - amt_left
-        if amt_left == 0:
-            if rel_edge_idx is not None and rel_edge is not None:
-                if rel_edge_idx < rel_edge.get_values()[1]:    
-                    return self._rule_3, ()
+        if rel_edge_idx is not None and rel_edge is not None:
+            if self._check_idxs_equal(rel_edge_idx, rel_substr_idx):    
+                return self._rule_3, ()
             else:
-                return self._rule_2_a, (self, rel_node, direction_to_go) 
+                return self._rule_2_r, (self, rel_edge, rel_edge_idx, rel_substr_idx)
+            raise AssertionError(f'get appropriate rule error string_id, extension, phase: {self._get_curr_string_id()}, {self._curr_extension}, {self._curr_phase}')
         else:
-            if not self._check_node_has_empty_edge(rel_node):
-                    return self._rule_2_r, (self, rel_edge, rel_edge_idx, direction_to_go)
-            if rel_edge is not None:
-                if amt_left == 1 and rel_edge.traverse_edge().is_leaf:
-                    return self._rule_1, ()
+            return self._rule_2_a, (self, rel_node, rel_substr_idx) 
+            
+            
+            # if rel_edge is not None:
+            #     if amt_left == 1 and rel_edge.traverse_edge().is_leaf:
+            #         return self._rule_1, ()
         raise Exception(f'Could not get appropriate rule for string_id {self._curr_string_id}, ext: {self._curr_extension}, phase: {self._curr_phase}')
     
 
@@ -162,7 +179,7 @@ class UkkonenTree:
         return curr_node[self._get_letter(idx_to_travel, self._get_curr_string_id())]
 
         
-    def _find_idx_travel_mismatch(self, idx_road: tuple[int, int], idx_direction: tuple[int,int]) -> tuple[bool, int]:
+    def _find_idx_travel_mismatch(self, idx_road: tuple[int, int|GlobalInt], idx_direction: tuple[int,int]) -> tuple[bool, int]:
         """ Compare whether indices of the string represent equal substrings, and returns until what index of idx_road the mismatch occurs 
             idx_road should be an existing edge, and idx_direction should be the desired path.
 
@@ -171,14 +188,14 @@ class UkkonenTree:
         
         _, cut_off = self._get_cutoff(idx_road, idx_direction)     # If |road| < |direction|, test only for the portion of direction that is relevant
         
-        length_of_subtring = cut_off - idx_direction[0]     # length of substrings to test
+        length_of_subtring = cut_off - idx_direction[0] + 1     # length of substrings to test
         for offset in range(0, length_of_subtring):
             if self._get_letter(idx_direction[0] + offset, self._get_curr_string_id()) != self._get_letter(idx_road[0] + offset, self._get_curr_string_id()):
-                return (True, idx_road[idx_road[0] + offset])       # return idx in road where mismatch occurs
+                return (True, idx_road[0] + offset)       # return idx in road where mismatch occurs
             
         return (False, idx_road[0] + length_of_subtring)            
 
-    def _get_cutoff(self, idx_road: tuple[int,int], idx_direction: tuple[int, int]) -> tuple[int,int]:
+    def _get_cutoff(self, idx_road: tuple[int,int|GlobalInt], idx_direction: tuple[int, int]) -> tuple[int,int]:
         """ Get appropriate index for idx_direction such that |idx_road| >= |idx_direction|
         """
         if idx_direction[1] - idx_direction[0] > idx_road[1] - idx_road[0]:                 
@@ -192,16 +209,16 @@ class UkkonenTree:
     def _update_active_node_w_remainder(self) -> None:
         """ Update active node by traversing remainder and adjusting remainder accordingly
         """
-        rem_check = self._get_remainder()
-        if rem_check is not None:
+        if isinstance(self._remainder, tuple):
             self._active_node, _, _, amt_remainder_remaining = self._skip_count(self._active_node, self._remainder)
             remainder_adjustment = self._get_remainder_length() - amt_remainder_remaining
             self._decrement_remainder(remainder_adjustment)
 
+    def _check_idxs_equal(self, idx1: int, idx2: int) -> bool:
+        return self._get_letter(idx1, self._get_curr_string_id()) == self._get_letter(idx2, self._get_curr_string_id())
 
     def _get_remainder_length(self) -> int:
-        rem_check = self._get_remainder()
-        if rem_check is not None:
+        if isinstance(self._remainder, tuple):
             return self._remainder[1] - self._remainder[0]
         return 0
 
@@ -225,29 +242,40 @@ class UkkonenTree:
 
     def _increment_extension(self) -> None:
         self._curr_extension += 1
+        self._update_active_node()
+        if self._curr_extension > self._curr_phase:
+            self._increment_phase()
+        else:
+            print(self.get_suffixes_and_links())
+            
+
+    def _update_active_node(self) -> None:
+        """ Follow suffix link
+        """
+        self._active_node = self._active_node.get_suffix_link().traverse()
 
     def add_string(self, string: str) -> None:
-        if self._get_curr_string_id() is None:
-            self._set_curr_string_id(0)
-        else:
+        if self.strings != []:                                      # avoid first increment where string_id is initialised to 0
             self._set_curr_string_id(self._get_curr_string_id() + 1)
         self.strings.append(string)
         self._construct_tree()
 
     def _increment_remainder(self) -> None:
         if self._remainder == None:
-            self._remainder = (self._curr_extension, self._curr_extension)
+            self._remainder = (self._curr_phase, self._curr_phase)
         else:
             self._remainder = (self._remainder[0], self._remainder[1] + 1)
             #TODO: Check this is valid 
 
     def _increment_phase(self) -> None:
         self._curr_phase += 1
+        print(self.get_suffixes_and_links())
+        self._increment_global_int()
 
     def _insert_internal_node(self, edge: UkkonenEdge, pos: int) -> CharNode:
         """ Inserts internal node before pos. 
         """
-        new_node = CharNode()
+        new_node = CharNode(f"<{chr(self._curr_extension+100)}{chr(self._curr_phase+100)}>")
         node2 = edge._change_dest(new_node)     # old destination
         old_val = edge.change_end_value(pos - 1)    # value before old dest
         new_node.add_UkkonenEdge(self._get_letter(pos, self._get_curr_string_id()), (pos , old_val), node2, self._get_curr_string_id())
@@ -258,7 +286,8 @@ class UkkonenTree:
     def _add_pending(self, node: CharNode) -> None:
         self._pending = node
     
-    def _get_pending(self) -> CharNode|None:
+    def _get_pending(self) -> CharNode:
+        assert self._pending is not None
         return self._pending
 
     def _resolve_suffix_link(self, new_node: CharNode) -> None:
@@ -266,11 +295,68 @@ class UkkonenTree:
         if isinstance(pending, CharNode):
             new_node.add_suffix_link(pending)
 
-    def _get_curr_string_id(self) -> int|None:
+    def _get_curr_string_id(self) -> int:
         return self._curr_string_id
     
     def _set_curr_string_id(self, value: int) -> None:
         self._curr_string_id = value
     
-j = UkkonenTree()
-j.add_string('aababababhsbs')
+    def _set_last_ext(self, value: int) -> None:
+        self._last_ext = value
+
+    def get_suffixes_and_links(
+        self
+    ) -> tuple[list[str], list[tuple[str, str]]]:
+        """
+        Returns
+        -------
+        suffixes : list[str]
+            Every suffix stored in the tree (one entry per leaf).
+        links : list[tuple[str, str]]
+            For each suffix-link, the pair (substring_at_source_node,
+            substring_at_destination_node).
+        """
+        suffixes: list[str] = []
+        node_label: dict[CharNode, str] = {self.root: ""}
+
+        def dfs(node: CharNode, label: str) -> None:
+            node_label[node] = label                              # label of this node
+
+            # CharTable stores children in an array[128]; iterate over used slots
+            for idx, edge in enumerate(node.array.array):
+                if edge is None:
+                    continue
+
+                # substring carried by this edge
+                start, end = edge.value
+                if start == end:
+                    edge_text = self.strings[edge.string_id][start]
+                else:
+                    edge_text = self.strings[edge.string_id][start:end+1]   # end is exclusive
+                new_label = label + edge_text
+                child = edge.traverse_edge()
+
+                if isinstance(child, CharNode):       # internal node
+                    dfs(child, new_label)
+                else:                                 # leaf: we have a complete suffix
+                    suffixes.append(new_label)
+
+        dfs(self.root, "")
+
+        links: list[tuple[str, str]] = []
+        for src, src_label in node_label.items():
+            if src.has_suffix_link():
+                dst = src.suffix_link.dest
+                dst_label = node_label.get(dst, "")   # root→"" if not visited yet
+                links.append((src_label, dst_label))
+
+        return suffixes, links
+
+if __name__=='__main__':
+    j = UkkonenTree()
+    tst_str = 'aababababhsbscbabcasashxzvassacbbasj$'
+    j.add_string(tst_str)
+    all = j.get_suffixes_and_links()
+    assert len(tst_str) == len(all[0])
+
+

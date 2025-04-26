@@ -1,4 +1,5 @@
 from CharTable import CharTable
+from GlobalInt import GlobalInt
 
 
 
@@ -8,7 +9,7 @@ class Node:
         self.value = value
 
 class UkkonenEdge:
-    def __init__(self, value: tuple[int, int], dest, string_id: int):
+    def __init__(self, value: tuple[int, int|GlobalInt], dest, string_id: int):
         self.value = value
         self.dest = dest
         self.string_id = string_id
@@ -25,10 +26,10 @@ class UkkonenEdge:
         self.dest = new_dest
         return old_dest
     
-    def get_values(self) -> tuple[int, int]:
+    def get_values(self) -> tuple[int, int|GlobalInt]:
         return self.value
         
-    def change_end_value(self, new_value: int) -> int:
+    def change_end_value(self, new_value: int) -> int|GlobalInt:
         old_value = self.value[1]
         self.value = (self.value[0], new_value)
         return old_value
@@ -41,7 +42,7 @@ class UkkonenEdge:
         return self.dest
 
     def get_length(self) -> int:
-        return self.value[1] - self.value[0]
+        return self.value[1] - self.value[0] + 1
 
 class BinaryNode(Node):
     def __init__(self, is_leaf: bool, value: str):
@@ -78,8 +79,9 @@ class CharNode(Node):
     """ Tree implemented with CharTable as children for O(1) lookup
         of children
     """
-    def __init__(self) -> None:
+    def __init__(self, name: str='default') -> None:
         self.array: CharTable[UkkonenEdge] = CharTable()
+        self.name: str = name
         self.suffix_link: SuffixLink|None = None
     
     def get_edge(self, direction: str) -> UkkonenEdge:
@@ -90,12 +92,18 @@ class CharNode(Node):
 
     def has_suffix_link(self) -> bool:
         return isinstance(self.suffix_link, SuffixLink)
+
+    def get_suffix_link(self) -> SuffixLink:
+        assert self.suffix_link is not None
+        return self.suffix_link
     
     def get_UkkonenEdge(self, letter: str) -> UkkonenEdge:
         return self.array[letter]
 
-
-    def add_UkkonenEdge(self, letter: str, value: tuple[int, int], dest: Node, string_id: int) -> None:
+    def __repr__(self) -> str:
+        return f"{self.name} {self.array.get_children_letters()}"
+    
+    def add_UkkonenEdge(self, letter: str, value: tuple[int, int|GlobalInt], dest: Node, string_id: int) -> None:
         self.array[letter] = UkkonenEdge(value, dest, string_id)
 
     def __getitem__(self, item: str) -> UkkonenEdge:

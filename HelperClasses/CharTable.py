@@ -15,12 +15,19 @@ class CharTable(typing.Generic[T]):
     
     def __getitem__(self, char: str) -> T:
         return_val = self.array[self._get_char_index(char)]
-        if return_val is None:
-            raise IndexError(f'There is nothing assigned at index {char}')
+        # if return_val is None:
+        #     raise IndexError(f'There is nothing assigned at index {char}')
         return return_val
 
     def __setitem__(self, char: str, value: T) -> None:
         self.array[self._get_char_index(char)] = value
+
+    def get_children_letters(self) -> list[str]:
+        children = []
+        for idx, val in enumerate(self.array):
+            if val is not None:
+                children.append(chr(idx))
+        return children
 
 
 class CharFreqTable(CharTable):

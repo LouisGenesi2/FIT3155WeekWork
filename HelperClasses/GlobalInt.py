@@ -35,3 +35,6 @@ class GlobalInt:
     
     def __add__(self, other) -> int:
         return self.value + int(other)
+
+    def __index__(self) -> int:
+        return self.value

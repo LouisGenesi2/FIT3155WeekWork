@@ -264,6 +264,7 @@ if __name__=='__main__':
     MAX_LEN      = 64
 
     # --- test loop ---------------------------------------------------------------
+    print('testing')
     for _ in range(NUM_TRIALS):
         body     = ''.join(random.choice(ALPHABET) for _ in range(random.randint(MIN_LEN, MAX_LEN)))
         test_str = f"{body}$"         # Ukkonen implementation expects a unique terminator
@@ -273,4 +274,6 @@ if __name__=='__main__':
 
         suffixes, _ = tree.get_suffixes_and_links()
         assert len(test_str) == len(suffixes), f"Mismatch for {test_str!r}"
+        for i in range(len(test_str)):
+            assert test_str[i:] in suffixes
 

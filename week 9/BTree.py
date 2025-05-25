@@ -10,6 +10,9 @@ class BTreeIndex:
     
     def __index__(self) -> int:
         return self.val
+    
+    def __add__(self, int: int) -> 'BTreeIndex':
+        return BTreeIndex(self.get_val() + int)
 
 class KeyIndex(BTreeIndex):
     """ Ensures separation between indexes related to keys and ones related to children
@@ -23,16 +26,15 @@ class ChildIndex(BTreeIndex):
 
 T = TypeVar('T')
 I = TypeVar('I')
-S = TypeVar("S")
+S = TypeVar("S", bound='BTreeArray')
 
-class BTreeArray(Generic[T, I, S]):
+class BTreeArray(Generic[T, I]):
     __slots__ = ("_min", "_max", "_arr")
     
-    def __init__(self) -> None:
-        self._min = None
-        self._max = None
-        self._arr: list[I] = None
-        self.index_type: type = type(self)
+    def __init__(self, t_val: int, init_arr: list[I] = []) -> None:
+        self._min = 0
+        self._max = 0
+        self._arr: list[I] = init_arr
 
     def get_arr(self) -> list[I]:
         return self._arr
@@ -47,14 +49,20 @@ class BTreeArray(Generic[T, I, S]):
     def get_t_val(self) -> int:
         pass
 
-    def slice(self, start_idx: T, end_idx: T) -> S:
+    def slice(self: S, start_idx: T, end_idx: T) -> S:
         """ returns slice of self
         """
         assert isinstance(start_idx, type(self)) and isinstance(end_idx, type(self))
         return type(self)(self.get_t_val(), self.get_arr()[start_idx:end_idx])
+    
+    def insert_at_pos(self, child: I, idx: T) -> None:
+        """ Inserts key at index
+        """
+        new_arr = self.get_arr()[0:idx] + [child] + self.get_arr()[idx+1:]
+        self.set_arr(new_arr)
 
 
-class BTreeKeysArray:
+class BTreeKeysArray(BTreeArray[KeyIndex, int]):
     def __init__(self, t_val: int, init_arr: list[int] = []) -> None:
         self.min = t_val - 1
         self.max = t_val * 2 - 1
@@ -109,11 +117,11 @@ class BTreeKeysArray:
         self.set_arr(new_arr)
 
     
-class BTreeChildrenArray:
-    def __init__(self, t_val: int, init_arr: 'list[BTreeNode]' = []) -> None:
+class BTreeChildrenArray(BTreeArray[ChildIndex, 'BTreeNode']):
+    def __init__(self, t_val: int, init_arr: 'list[BTreeNode|None]' = []) -> None:
         self.min = t_val
         self.max = t_val * 2
-        self.arr: 'list[BTreeNode]' = init_arr
+        self.arr: 'list[BTreeNode|None]' = init_arr
     
     def get_t_val(self) -> int:
         return self.min
@@ -123,19 +131,10 @@ class BTreeChildrenArray:
 
     def __getitem__(self, idx: ChildIndex) -> 'BTreeNode':
         assert isinstance(idx, ChildIndex)
-        return self.get_arr()[idx]
+        item = self.get_arr()[idx]
+        assert item is not None
+        return item
     
-    def slice(self, start_idx: ChildIndex, end_idx: ChildIndex) -> 'BTreeChildrenArray':
-        """ returns BTreeChildrenArray of slice
-        """
-        assert isinstance(start_idx, ChildIndex) and isinstance(end_idx, ChildIndex)
-        return BTreeChildrenArray(self.get_t_val(), self.get_arr()[start_idx:end_idx])
-    
-    def insert_at_pos(self, key: int, idx: KeyIndex) -> None:
-        """ Inserts key at index
-        """
-        new_arr = self.get_arr()[0:idx] + [key] + self.get_arr()[idx+1:]
-        self.set_arr(new_arr)
 
 class BTreeNode:
     def __init__(self, t_val: int, is_root: bool) -> None:
@@ -150,15 +149,15 @@ class BTreeNode:
         """
         assert isinstance(keys, BTreeKeysArray) and isinstance(children, BTreeChildrenArray)
         assert len(keys) == len(children) - 1 or (len(keys) == 0 and len(children) == 0)
-        self.get_children_array = children
-        self.get_keys_array = keys
+        self._children_array = children
+        self._keys_array = keys
 
     def get_t_val(self) -> int:
         return self.t_val
 
     def is_full(self) -> bool:
-        assert len(self.get_keys_array()) <= self.max   # should never exceed max
-        return len(self.get_keys_array()) == self.max
+        assert len(self.get_keys_array()) <= self.get_keys_array().max   # should never exceed max
+        return len(self.get_keys_array()) == self.get_keys_array().max
 
     def is_leaf(self) -> bool:
         return self.leaf
@@ -172,12 +171,12 @@ class BTreeNode:
     def get_child(self, idx: ChildIndex) -> 'BTreeNode':
         return self.get_children_array()[idx]
     
-    def get_travel_child(self, key: int) -> 'BTreeNode':
-        """ Returns child tree which should be traversed to
+    def get_travel_child(self, key: int) -> 'tuple[BTreeNode, ChildIndex]':
+        """ Returns child tree which should be traversed to and the index it was stored at
         """
         idx = self.get_keys_array().get_travel_insertion_idx(key)
         l_child_idx = self.key_idx_to_l_child_idx(idx)
-        return self.get_child(l_child_idx)
+        return self.get_child(l_child_idx), l_child_idx
     
     def key_idx_to_l_child_idx(self, idx: KeyIndex) -> ChildIndex:
         return ChildIndex(idx.get_val())
@@ -191,7 +190,7 @@ class BTreeNode:
         assert self.is_leaf()
         self.get_keys_array()
 
-    def known_insert(self, key: int, idx_to_insert: KeyIndex) -> None:
+    def known_insert(self, key: int, idx_to_insert: ChildIndex) -> None:
         """ Inserts a key knowing where to insert it. Occurs when promoting to parent
         """
         self.get_keys_array()
@@ -249,19 +248,20 @@ class BTree:
         """
         # TODO: break up every full node
         while not pos.is_leaf():
-            next_pos = pos.get_travel_child(key)
+            next_pos, next_pos_idx_in_parent = pos.get_travel_child(key)
             if next_pos.is_full():
-                next_pos = self._break_full_node(key=key, node=next_pos, parent_node=pos)
+                next_pos = self._break_full_node(key=key, node=next_pos, parent_node=pos, node_idx_in_parent=next_pos_idx_in_parent)
             pos = next_pos
 
         assert pos.is_leaf()
         return pos
         
     
-    def _break_full_node(self, key: int, node: BTreeNode, parent_node: BTreeNode) -> BTreeNode:
+    def _break_full_node(self, key: int, node: BTreeNode, parent_node: BTreeNode, node_idx_in_parent: ChildIndex) -> BTreeNode:
         """ Breaks up a full node and returns the node that is appropriate for the key
         """
-        key_arrs, child_arrs = node.split_node_arrays() 
+        key_arrs, child_arrs = node.split_node_arrays()
+        parent_node.known_insert(key, node_idx_in_parent)
 
 
     def create_node(self, node: BTreeNode, child_idx: ChildIndex) -> BTreeNode:

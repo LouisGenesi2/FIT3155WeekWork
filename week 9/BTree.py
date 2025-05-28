@@ -1,5 +1,6 @@
-from typing import Generic, TypeVar, Callable
+from typing import Generic, TypeVar, Callable, List, Optional, Sequence, Iterable
 from abc import abstractmethod
+import random
 
 class BTreeIndex:
     def __init__(self, val: int) -> None:
@@ -49,9 +50,22 @@ class BTreeKeysArray:
     def __len__(self) -> int:
         return len(self.get_arr())
     
-    def get_travel_insertion_idx(self, item: int) -> KeyIndex:
+    def get_travel_insertion_idx(self, item: int) -> ChildIndex:
         """ returns the idx that if done on an internal node, is where to travel,
             and if a leaf, is where to insert 
+        """
+        # TODO: binary search
+        for idx, val in enumerate(self.arr):
+            if val > item:
+                return ChildIndex(idx)
+            else:
+                if idx == len(self) - 1:    # get to end of arr and item is biggest
+                    return ChildIndex(idx+1)
+
+        raise AssertionError('No travel index found')
+    
+    def get_insertion_location(self, item: int) -> KeyIndex:
+        """ returns where key should go. This includes after the end of the current array
         """
         # TODO: binary search
         for idx, val in enumerate(self.arr):
@@ -59,12 +73,13 @@ class BTreeKeysArray:
                 return KeyIndex(idx)
             else:
                 if idx == len(self) - 1:    # get to end of arr and item is biggest
-                    return KeyIndex(idx)
-
-        raise AssertionError('No travel index found')
-    
+                    return KeyIndex(idx+1)
+                
+        if len(self.arr) == 0:
+            return KeyIndex(0)
+        
     def get_potential_key_loc(self, item: int) -> KeyIndex:
-        """ returns where key could be, and where to travel if not
+        """ returns where key could be, and where to travel if not. Used for deletion.
         """
         # TODO: binary search
         for idx, val in enumerate(self.arr):
@@ -76,6 +91,9 @@ class BTreeKeysArray:
                 
                 if idx == len(self) - 1:    # get to end of arr and item is biggest
                     return KeyIndex(idx)
+                
+        if len(self.arr) == 0:
+            return KeyIndex(0)
     
     def get_key_idx(self, key: int) -> KeyIndex:
         """ Returns the index at which the key is stored.
@@ -100,6 +118,7 @@ class BTreeKeysArray:
     def insert_at_pos(self, key: int, idx: KeyIndex) -> None:
         """ Inserts key at index
         """
+        assert isinstance(idx, KeyIndex)
         new_arr = self.get_arr()[0:idx] + [key] + self.get_arr()[idx:]
         self.set_arr(new_arr)
 
@@ -117,7 +136,7 @@ class BTreeKeysArray:
         return self.get_arr().pop(idx)
     
 class BTreeChildrenArray:
-    def __init__(self, t_val: int, init_arr: 'list[BTreeNode|None]' = []) -> None:
+    def __init__(self, t_val: int, init_arr: 'list[BTreeNode|None]' = [None]) -> None:
         self.min = t_val
         self.arr: 'list[BTreeNode|None]' = init_arr
     
@@ -136,6 +155,11 @@ class BTreeChildrenArray:
     def pop(self, idx: ChildIndex) -> 'BTreeNode|None':
         return self.arr.pop(idx)
 
+    def __setitem__(self, idx: ChildIndex, val: 'BTreeNode|None') -> None:
+        assert isinstance(idx, ChildIndex)
+        assert isinstance(val, BTreeNode) or val is None
+        self.arr[idx.get_val()] = val
+
     def __getitem__(self, idx: ChildIndex) -> 'BTreeNode|None':
         assert isinstance(idx, ChildIndex)
         item = self.get_arr()[idx]
@@ -147,26 +171,28 @@ class BTreeChildrenArray:
     def slice(self, start_idx: ChildIndex, end_idx: ChildIndex) -> 'BTreeChildrenArray':
         """ returns slice of self
         """
-        assert isinstance(start_idx, type(self)) and isinstance(end_idx, type(self))
+        assert isinstance(start_idx, ChildIndex) and isinstance(end_idx, ChildIndex)
         return BTreeChildrenArray(self.get_t_val(), self.get_arr()[start_idx:end_idx])
     
-    def insert_at_pos(self, children: 'BTreeChildrenArray', idxs: 'list[ChildIndex]') -> None:
+    def insert_at_pos(self, child: 'BTreeNode|None', idx: ChildIndex) -> None:
         """ Inserts children at idxs.
             Children are the children to insert. idx are the positions to insert them at.
         """
-        # TODO: implement
-        new_arr = []
-        for arrs_idx, (child, idx) in enumerate(zip(children.get_arr(), idxs)):   #
-            if arrs_idx == 0:
-                if arrs_idx == len(children) - 1:
-                    new_arr += self.get_arr()[0:idx] + [child] + self.get_arr()[idx:]
-                else:
-                    new_arr += self.get_arr()[0:idx] + [child] + self.get_arr()[idx:arrs_idx + 1]
+        new_arr = self.get_arr()[0:idx] + [child] + self.get_arr()[idx:]
+        self.set_arr(new_arr)
+        # # TODO: implement
+        # new_arr = []
+        # for arrs_idx, (child, idx) in enumerate(zip(children.get_arr(), idxs)):   #
+        #     if arrs_idx == 0:
+        #         if arrs_idx == len(children) - 1:
+        #             new_arr += self.get_arr()[0:idx] + [child] + self.get_arr()[idx:]
+        #         else:
+        #             new_arr += self.get_arr()[0:idx] + [child] + self.get_arr()[idx:arrs_idx + 1]
             
-            if arrs_idx == len(children) - 1:
-                new_arr += [child] + self.get_arr()[idx:]
-            else:
-                new_arr += [child] + self.get_arr()[idx:arrs_idx + 1]
+        #     if arrs_idx == len(children) - 1:
+        #         new_arr += [child] + self.get_arr()[idx:]
+        #     else:
+        #         new_arr += [child] + self.get_arr()[idx:arrs_idx + 1]
         
         self.set_arr(new_arr)
 
@@ -177,7 +203,7 @@ class BTreeChildrenArray:
             new_arr = self.arr + other_arr
         else:
             raise TypeError
-        assert new_arr <= self.get_max()
+        assert len(new_arr) <= self.get_max()
         return BTreeChildrenArray(self.get_t_val(), new_arr)
     
     
@@ -194,7 +220,7 @@ class BTreeNode:
         """ In one swoop, set what's in the Node
         """
         assert isinstance(keys, BTreeKeysArray) and isinstance(children, BTreeChildrenArray)
-        assert len(keys) == len(children) - 1 or (len(keys) == 0 and len(children) == 0)
+        assert len(keys) == len(children) - 1
         self._children_array = children
         self._keys_array = keys
 
@@ -202,8 +228,10 @@ class BTreeNode:
         return self.t_val
 
     def is_full(self) -> bool:
-        assert len(self.get_keys_array()) <= self.get_keys_array().max   # should never exceed max
-        return len(self.get_keys_array()) == self.get_keys_array().max
+        assert len(self.get_keys_array()) <= self.get_t_val() * 2 - 1   # should never exceed max
+        assert len(self.get_children_array()) <= self.get_t_val() * 2
+        assert len(self.get_children_array()) == len(self.get_keys_array()) + 1
+        return len(self.get_keys_array()) == self.get_t_val() * 2 - 1
 
     def is_leaf(self) -> bool:
         return self.leaf
@@ -226,8 +254,7 @@ class BTreeNode:
         """ Returns child tree which should be traversed to and the index it was stored at
         """
         idx = self.get_keys_array().get_travel_insertion_idx(key)
-        l_child_idx = self.key_idx_to_l_child_idx(idx)
-        return self.get_child(l_child_idx), l_child_idx
+        return self.get_child(idx), idx
     
     def key_idx_to_l_child_idx(self, idx: KeyIndex) -> ChildIndex:
         return ChildIndex(idx.get_val())
@@ -241,15 +268,31 @@ class BTreeNode:
         assert self.is_leaf()
         self.get_keys_array()
 
-    def known_single_key_insert(self, key: int, l_child: 'BTreeChildrenArray|None', r_child: 'BTreeChildrenArray|None', idx_to_insert: KeyIndex) -> None:
-        """ Handles key insertion in insertion split case.
-            Only one of l_child or r_child should be inserted, as a key insertion needs one child insertion.
-            None means to leave left or right unchanged, use BTreeChildrenArray(init=[None]) BTreeChildrenArray(init=[<BTreeNode>]) for inserting an empty child or node
+    def extend_keys(self, key: int, r_child: 'BTreeNode|None') -> None:
+        """ Adds key and child to end of self
+        """
+        assert isinstance(r_child, BTreeNode) or r_child is None
+        self.get_keys_array().get_arr().append(key)
+        self.get_children_array().get_arr().append(r_child)
+
+    def replace_child(self, new_child: 'BTreeNode|None', pos: ChildIndex) -> 'BTreeNode|None':
+        """ replaces child stored at index. Returns old child stored
+        """
+        old_child = self.get_children_array()[pos]
+        self.get_children_array()[pos] = new_child
+        return old_child
+
+    def known_single_key_insert(self, key: int, l_child: 'BTreeNode|None', idx_to_insert: KeyIndex) -> None:
+        """ Handles key insertion. Insertion is always between existing keys. Use extend_keys for appending a new key to the end.
+            l_child can be BTreeChildrenArray(init=[None]) or BTreeChildrenArray(init=[<BTreeNode>]) for inserting an empty child or node
         """
         assert isinstance(idx_to_insert, KeyIndex)
+
+        # in case where insertion is an extension, must use extension
+        if idx_to_insert.get_val() > len(self.get_keys_array()) - 1:
+            raise ValueError('known_single_key_insert cannot be used for extensions')
         # An insertion must have exactly one child inserted. 
-        assert (l_child is None and isinstance(r_child, BTreeChildrenArray)) or (r_child is None and isinstance(l_child, BTreeChildrenArray))
-        
+        assert isinstance(l_child, BTreeNode|None)
         keys = self.get_keys_array()
         keys.insert_at_pos(key, idx_to_insert)
 
@@ -258,19 +301,18 @@ class BTreeNode:
 
         # add child
         children = self.get_children_array()
-        if isinstance(l_child, BTreeChildrenArray):
-            children.insert_at_pos(l_child, [l_child_idx])
-        elif isinstance(r_child, BTreeChildrenArray):
-            children.insert_at_pos(r_child, [r_child_idx])
+        
+        children.insert_at_pos(l_child, l_child_idx)
+
         
    
     def transform_to_internal(self) -> None:
-        pass
+        self.leaf = False
 
     def transform_to_leaf(self) -> None:
-        pass
+        self.leaf = True
 
-    def split_node_arrays(
+    def _split_node_arrays(
         self
     ) -> tuple[tuple[BTreeKeysArray,BTreeKeysArray,BTreeKeysArray],
                tuple[BTreeChildrenArray,BTreeChildrenArray]]:
@@ -280,13 +322,14 @@ class BTreeNode:
         t_val = self.get_t_val()
 
         # split child array into 2
-        c_idx1, c_idx2, c_idx3 = ChildIndex(0), ChildIndex(t_val + 1), ChildIndex(2*t_val+1)
+        c_idx1, c_idx2, c_idx3 = ChildIndex(0), ChildIndex(t_val), ChildIndex(2*t_val+1)
         c_arr1, c_arr2 = self.get_children_array().slice(c_idx1, c_idx2),  self.get_children_array().slice(c_idx2,c_idx3)
 
         # split key array into 3
-        k_idx1, k_idx2, k_idx3, k_idx4 = KeyIndex(0), KeyIndex(t_val), KeyIndex(t_val + 1), KeyIndex(2*t_val)
+        k_idx1, k_idx2, k_idx3, k_idx4 = KeyIndex(0), KeyIndex(t_val - 1), KeyIndex(t_val), KeyIndex(2*t_val)
         k_arr1, k_arr2, k_arr3 = self.get_keys_array().slice(k_idx1, k_idx2), BTreeKeysArray(t_val, [self.get_keys_array()[k_idx2]]), self.get_keys_array().slice(k_idx3, k_idx4)
 
+        assert len(c_arr1) == len(k_arr1) + 1 and len(c_arr2) == len(k_arr3) + 1
         return (
             (k_arr1, k_arr2, k_arr3),
             (c_arr1, c_arr2)  
@@ -325,9 +368,16 @@ class BTree:
         return self.root
     
     def insert(self, key: int) -> None:
-        leaf = self._get_to_leaf_insertion(key, self.get_root())
-        idx_to_insert = leaf.get_keys_array().get_potential_key_loc(key)
-        leaf.known_single_key_insert(key=key, idx_to_insert=idx_to_insert, l_child=BTreeChildrenArray(init_arr=[None]), r_child=BTreeChildrenArray(init_arr=[None]))
+        try:
+            leaf = self._get_to_leaf_insertion(key, self.get_root())
+            idx_to_insert = leaf.get_keys_array().get_insertion_location(key)
+            
+            if idx_to_insert.get_val() <= len(leaf.get_keys_array()) - 1:
+                leaf.known_single_key_insert(key=key, idx_to_insert=idx_to_insert, l_child=None)
+            else:
+                leaf.extend_keys(key, None)
+        except Exception as e:
+            raise Exception(f'Error inserting {key}, {e}')
 
 
     def del_val(self, key: int) -> None:
@@ -336,7 +386,9 @@ class BTree:
     def _get_to_leaf_insertion(self, key: int, pos: BTreeNode) -> BTreeNode:
         """ Given a key, get to the appropriate leaf
         """
-        # TODO: break up every full node
+        # edge case, root is leaf and is full
+        if pos.is_full():
+            pos = self._break_full_node(key=key, node=pos, parent_node=None, node_idx_in_parent=None)
         while not pos.is_leaf():
             next_pos, next_pos_idx_in_parent = pos.get_travel_child(key)
             if next_pos.is_full():
@@ -402,11 +454,10 @@ class BTree:
         parent_key, next_pos = parent.pop(key_idx, key_idx.to_l_child())
 
         # rotate r_sibling into parent, and point to l_sibling
-        parent.known_single_key_insert(key=r_sibling_key, l_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[next_pos]), r_child=None, idx_to_insert=key_idx)
+        parent.known_single_key_insert(key=r_sibling_key, l_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[next_pos]), idx_to_insert=key_idx)
 
         # rotate parent key into l_sibling, right child is the left child of former right sibling
-        # TODO: check this insert
-        next_pos.known_single_key_insert(key=parent_key, l_child=None, r_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[r_sibling_l_child]), idx_to_insert=KeyIndex(len(next_pos.get_keys_array())))
+        next_pos.extend_keys(key=parent_key, r_child=r_sibling_l_child)
 
         return next_pos
 
@@ -429,16 +480,15 @@ class BTree:
         parent_key, next_pos = parent.pop(key_idx, key_idx.to_r_child())
 
         # rotate l_sibling into parent, and point to r_sibling
-        parent.known_single_key_insert(key=l_sibling_key, r_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[next_pos]), l_child=None, idx_to_insert=key_idx)
+        parent.known_single_key_insert(key=l_sibling_key, r_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[next_pos]), l_child=BTreeChildrenArray(None), idx_to_insert=key_idx)
 
         # rotate parent key into r_sibling, left child is the right child of former left sibling
-        # TODO: check this insert
-        next_pos.known_single_key_insert(key=parent_key, r_child=None, l_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[l_sibling_r_child]), idx_to_insert=KeyIndex(0))
+        next_pos.known_single_key_insert(key=parent_key, l_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[l_sibling_r_child]), idx_to_insert=KeyIndex(0))
 
         return next_pos
 
-    def _get_siblings(self, parent: BTreeNode, child_index: ChildIndex) -> list[BTreeNode]:
-        """ Gets siblings of children 
+    def _get_siblings(self, parent: BTreeNode, child_index: ChildIndex) -> list[BTreeNode|None]:
+        """ Gets siblings of children.
         """
         siblings = []
         if child_index.get_val() > 0:
@@ -453,7 +503,9 @@ class BTree:
         else:
             siblings.append(None)
 
+        return siblings
 
+    
     def _resolve_deletion_rule(self, key: int, pos: BTreeNode) -> BTreeNode:
         """ Given an internal node, check through all deletion cases and return where
             to continue traversal to leaf from
@@ -481,7 +533,7 @@ class BTree:
         next_pos_child_idx_in_parent = key_idx.to_l_child()
         next_pos = pos.get_child(next_pos_child_idx_in_parent)
         if next_pos.is_minimum():
-            # case 3
+            # case 3 - find a sibling and apply a rule
             l_sibling, r_sibling = self._get_siblings(pos, next_pos_child_idx_in_parent)
             if r_sibling is not None:
                 if r_sibling.is_minimum():
@@ -491,15 +543,16 @@ class BTree:
                     return self._consolidate_parent(l_child=l_sibling, r_child=next_pos, parent=pos, key_idx=key_idx)
                 
             if r_sibling is not None:
-                return self._r_sibling_rotate
+                return self._r_sibling_rotate(parent=pos, key_idx=key_idx)
             if l_sibling is not None:
-                return self._l_sibling_rotate
+                return self._l_sibling_rotate(parent=pos, key_idx=key_idx)
 
+        # case 1
         return next_pos
 
 
 
-    def _get_to_leaf_deleion(self, key: int, pos: BTreeNode) -> BTreeNode:
+    def _get_to_leaf_deletion(self, key: int, pos: BTreeNode) -> BTreeNode:
         """ Given a key, delete it from the Tree
         """
         while not pos.is_leaf():
@@ -507,19 +560,54 @@ class BTree:
         return pos
         
     
-    def _break_full_node(self, key: int, node: BTreeNode, parent_node: BTreeNode, node_idx_in_parent: ChildIndex) -> BTreeNode:
+    def _break_full_node(self, key: int, node: BTreeNode, parent_node: BTreeNode|None, node_idx_in_parent: ChildIndex|None) -> BTreeNode:
         """ Breaks up a full node and returns the node that is appropriate for the key
         """
-        key_arrs, child_arrs = node.split_node_arrays()
-        key_to_promote = key_arrs[1][0]
-        l_child, r_child = child_arrs
-        parent_node.known_single_key_insert(key=key_to_promote, child_idx=node_idx_in_parent, l_child=l_child, r_child=r_child)
+        assert ( isinstance(parent_node, BTreeNode) and isinstance(node_idx_in_parent, ChildIndex) ) or ( parent_node is None and node_idx_in_parent is None and node._root)
+        
+        key_arrs, child_arrs = node._split_node_arrays()
+        key_to_promote = key_arrs[1][KeyIndex(0)] # middle array is always a single item
+        l_children, r_children = child_arrs
+
+        # initialise new nodes
+        l_child_node = BTreeNode(t_val=self.t_val, is_root=False)
+        l_child_node.set_keys_children(keys=key_arrs[0], children=l_children)
+        r_child_node = BTreeNode(t_val=self.t_val, is_root=False)
+        r_child_node.set_keys_children(keys=key_arrs[2], children=r_children)
+
+        if not node.is_leaf():
+            l_child_node.transform_to_internal()
+            r_child_node.transform_to_internal()
+        
+        if parent_node is not None:
+            # edge case, promoting to right end of parent
+            if node_idx_in_parent.get_val() == len(parent_node.get_children_array()) - 1:
+                parent_node.extend_keys(key=key_to_promote, r_child=r_child_node)
+                old_pointer = parent_node.replace_child(new_child=l_child_node, pos=node_idx_in_parent)
+            else:
+                parent_node.known_single_key_insert(key=key_to_promote, idx_to_insert=KeyIndex(node_idx_in_parent.get_val()), l_child=l_child_node)
+                # fix right child pointer
+                old_pointer = parent_node.replace_child(new_child=r_child_node, pos = ChildIndex(node_idx_in_parent.get_val() + 1))
+            assert old_pointer is node # sanity check
+        else:
+            # case where breaking up root
+            new_root = BTreeNode(t_val=self.t_val, is_root=True)
+            new_root.set_keys_children(keys=BTreeKeysArray(t_val=self.t_val, init_arr=[key_arrs[1].get_arr()[0]]), children=BTreeChildrenArray(t_val=self.t_val, init_arr=[l_child_node, r_child_node]))
+            new_root.transform_to_internal()
+            self._set_root(new_root)
+        
+        if key < key_to_promote:
+            return l_child_node
+        elif key > key_to_promote:
+            return r_child_node
+        raise AssertionError()    # key should not already be in tree
+
+            
         
 
 
 
     def _set_root(self, node: BTreeNode) -> None:
-        assert len(self.root.get_keys_array()) == 0
         self.root = node
         node._root = True
 
@@ -527,6 +615,7 @@ class BTree:
     def create_node_w_arrs(self, child_arrs: list[BTreeChildrenArray|BTreeNode], key_arrs: list[BTreeKeysArray|int]) -> BTreeNode:
         """ Creates a child node at the 
         """
+        # TODO: FIX THIS
         new_child_arr = []
         for arr in child_arrs:
             new_child_arr += arr
@@ -547,4 +636,88 @@ class BTree:
     def delete_key(self, key: int) -> None:
         """ Deletes a key from the BTree
         """
+
+        leaf = self._get_to_leaf_deletion(key, self.root)
+        key_idx = leaf.get_keys_array().get_potential_key_loc(key)
+        assert leaf.get_key(key_idx) == key
+        leaf.pop(key_idx, key_idx.to_r_child())
+
+    def retrieve_keys_in_range(self, start_range_1_indexed: int, end_range_1_indexed: int) -> list[int]:
+        """ Retrieves keys in range in order 
+        """
+        pos = self.get_root()
+        all_keys = self.accumulate_keys(pos, [])
+        return all_keys[start_range_1_indexed - 1: end_range_1_indexed]
+    
+    def accumulate_keys(self, pos: BTreeNode, acc: list[int]) -> list[int]:
+        
+        for idx, child_node in enumerate(pos.get_children_array().get_arr()):
+            if isinstance(child_node, BTreeNode):
+                self.accumulate_keys(child_node, acc)
+            if idx != len(pos.get_children_array().get_arr()) - 1:
+                acc.append(pos.get_keys_array().get_arr()[KeyIndex(idx)])
+        return acc
+
+def unique_random_ints(n: int,
+                       pool: Optional[Iterable[int]] = None) -> List[int]:
+    """
+    Return `n` distinct random integers.
+
+    Parameters
+    ----------
+    n : int
+        How many integers to draw (must be ≥ 0).
+    pool : Iterable[int] | None, default None
+        Collection to sample from.  If None, the function uses
+        `range(0, max(10, n) * 10)`, which is always large enough
+        to supply `n` unique picks.
+
+    Returns
+    -------
+    List[int]
+        A list of `n` unique integers in random order.
+
+    Raises
+    ------
+    ValueError
+        If `n` exceeds the size of the (deduplicated) pool.
+    TypeError
+        If the pool contains non-integers.
+
+    Examples
+    --------
+    >>> unique_random_ints(5)
+    [18, 3, 71, 24, 55]
+
+    >>> unique_random_ints(3, [10, 20, 30, 40])
+    [40, 20, 10]
+    """
+    if n < 0:
+        raise ValueError("`n` must be non-negative")
+
+    # Build a candidate population.
+    if pool is None:
+        population: Sequence[int] = range(0, max(10, n) * 10)
+    else:
+        # Convert to list once; also deduplicate so “no repeats” is possible.
+        population = list(dict.fromkeys(pool))          # keeps left-most order
+        if not all(isinstance(x, int) for x in population):
+            raise TypeError("All elements in `pool` must be integers")
+
+    if n > len(population):
+        raise ValueError(
+            f"Cannot draw {n} unique values from a pool of size {len(population)}"
+        )
+
+    return random.sample(population, k=n)
+
+if __name__=='__main__':
+    random.seed(3)
+    tree = BTree(t_val=3)
+    vals_to_insert=unique_random_ints(100)
+    for val in vals_to_insert:
+        tree.insert(val)
+        print(tree.root.get_keys_array().get_arr())
+    print(tree.retrieve_keys_in_range(1,100000))
+
 

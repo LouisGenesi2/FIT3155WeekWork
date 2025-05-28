@@ -113,7 +113,8 @@ class BTreeKeysArray:
         assert new_arr <= self.get_max()
         return BTreeKeysArray(self.get_t_val(), new_arr)
     
-
+    def pop(self, idx: KeyIndex) -> int:
+        return self.get_arr().pop(idx)
     
 class BTreeChildrenArray:
     def __init__(self, t_val: int, init_arr: 'list[BTreeNode|None]' = []) -> None:
@@ -131,6 +132,9 @@ class BTreeChildrenArray:
 
     def get_arr(self) -> 'list[BTreeNode|None]':
         return self.arr
+    
+    def pop(self, idx: ChildIndex) -> 'BTreeNode|None':
+        return self.arr.pop(idx)
 
     def __getitem__(self, idx: ChildIndex) -> 'BTreeNode|None':
         assert isinstance(idx, ChildIndex)
@@ -237,10 +241,14 @@ class BTreeNode:
         assert self.is_leaf()
         self.get_keys_array()
 
-    def known_single_key_insert(self, key: int, l_child: 'BTreeChildrenArray', r_child: 'BTreeChildrenArray', idx_to_insert: KeyIndex) -> None:
-        """ Handles key insertion in insertion split case 
+    def known_single_key_insert(self, key: int, l_child: 'BTreeChildrenArray|None', r_child: 'BTreeChildrenArray|None', idx_to_insert: KeyIndex) -> None:
+        """ Handles key insertion in insertion split case.
+            Only one of l_child or r_child should be inserted, as a key insertion needs one child insertion.
+            None means to leave left or right unchanged, use BTreeChildrenArray(init=[None]) BTreeChildrenArray(init=[<BTreeNode>]) for inserting an empty child or node
         """
         assert isinstance(idx_to_insert, KeyIndex)
+        # An insertion must have exactly one child inserted. 
+        assert (l_child is None and isinstance(r_child, BTreeChildrenArray)) or (r_child is None and isinstance(l_child, BTreeChildrenArray))
         
         keys = self.get_keys_array()
         keys.insert_at_pos(key, idx_to_insert)
@@ -248,9 +256,12 @@ class BTreeNode:
         l_child_idx = idx_to_insert.to_l_child()
         r_child_idx = idx_to_insert.to_r_child()
 
+        # add child
         children = self.get_children_array()
-        children.insert_at_pos(l_child, [l_child_idx])
-        children.insert_at_pos(r_child, [r_child_idx])
+        if isinstance(l_child, BTreeChildrenArray):
+            children.insert_at_pos(l_child, [l_child_idx])
+        elif isinstance(r_child, BTreeChildrenArray):
+            children.insert_at_pos(r_child, [r_child_idx])
         
    
     def transform_to_internal(self) -> None:
@@ -285,8 +296,15 @@ class BTreeNode:
         assert len(self.get_keys_array()) > self.get_t_val() or self._root == True
         return len(self.get_keys_array()) == self.get_t_val()
         
+    def pop(self, pos: KeyIndex, child_to_pop: ChildIndex) -> 'tuple[int, BTreeNode]':
+        """ Removes the given position from the Node
+        """
+        # child popped should always be a neighbour
+        assert abs(child_to_pop.get_val() - pos.get_val()) <= 1
 
-        
+        key = self.get_keys_array().pop(pos)
+        child = self.get_children_array().pop(child_to_pop)
+        return key, child
 
         
 
@@ -295,6 +313,13 @@ class BTree:
     def __init__(self, t_val: int) -> None:
         self.root = BTreeNode(t_val=t_val, is_root=True)
         self.t_val = t_val
+
+    def swap_children(self, node1: BTreeNode, node2: BTreeNode, child_idx1: ChildIndex, child_idx2: ChildIndex) -> None:
+        """ Swap children of two nodes
+        """
+        node2.get_children_array()[child_idx2], node1.get_children_array()[child_idx1] = node1.get_child(child_idx1), node2.get_child(child_idx2)
+        
+
 
     def get_root(self) -> BTreeNode:
         return self.root
@@ -363,10 +388,54 @@ class BTree:
             
 
     def _r_sibling_rotate(self, parent: BTreeNode, key_idx: KeyIndex) -> BTreeNode:
-        pass
+        """ Counter clockwise rotation. Done during deletion where the next position is at minimum
+            but right sibling has above minimum. 
+            the smallest key in the right sibling of the key replaces the key,
+            the key is moved to the next position.
+            The left child of the former right sibling becomes the right child
+            of the moved key from the parent into the next position.
+        """
+        next_pos = parent.get_child(key_idx.to_l_child())
+        r_sibling = parent.get_child(key_idx.to_r_child())
+        
+        r_sibling_key, r_sibling_l_child = r_sibling.pop(KeyIndex(0), ChildIndex(0))
+        parent_key, next_pos = parent.pop(key_idx, key_idx.to_l_child())
+
+        # rotate r_sibling into parent, and point to l_sibling
+        parent.known_single_key_insert(key=r_sibling_key, l_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[next_pos]), r_child=None, idx_to_insert=key_idx)
+
+        # rotate parent key into l_sibling, right child is the left child of former right sibling
+        # TODO: check this insert
+        next_pos.known_single_key_insert(key=parent_key, l_child=None, r_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[r_sibling_l_child]), idx_to_insert=KeyIndex(len(next_pos.get_keys_array())))
+
+        return next_pos
+
 
     def _l_sibling_rotate(self, parent: BTreeNode, key_idx: KeyIndex) -> BTreeNode:
-        pass
+        """ Clockwise rotation. Done during deletion where the next position is at minimum
+            but left sibling has above minimum. 
+            the largest key in the left sibling of the key replaces the key,
+            the key is moved to the next position.
+            The right child of the former left sibling becomes the left child
+            of the moved key from the parent into the next position.
+        """
+        next_pos = parent.get_child(key_idx.to_r_child())
+        l_sibling = parent.get_child(key_idx.to_l_child())
+        
+        # get largest key and right child of largest key in left sibling
+        l_sibling_size = len(l_sibling.get_keys_array())
+        l_sibling_key, l_sibling_r_child = l_sibling.pop(KeyIndex(l_sibling_size), KeyIndex(l_sibling_size).to_r_child())
+        
+        parent_key, next_pos = parent.pop(key_idx, key_idx.to_r_child())
+
+        # rotate l_sibling into parent, and point to r_sibling
+        parent.known_single_key_insert(key=l_sibling_key, r_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[next_pos]), l_child=None, idx_to_insert=key_idx)
+
+        # rotate parent key into r_sibling, left child is the right child of former left sibling
+        # TODO: check this insert
+        next_pos.known_single_key_insert(key=parent_key, r_child=None, l_child=BTreeChildrenArray(t_val=self.t_val, init_arr=[l_sibling_r_child]), idx_to_insert=KeyIndex(0))
+
+        return next_pos
 
     def _get_siblings(self, parent: BTreeNode, child_index: ChildIndex) -> list[BTreeNode]:
         """ Gets siblings of children 

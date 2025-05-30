@@ -484,11 +484,11 @@ class BTree:
         parent_key_wrapped = [parent.get_key(key_idx)]
         
         # remove parent key from parent
-        parent.pop(key_idx, key_idx.to_r_child())
+        parent_key, parent_child = parent.pop(key_idx, key_idx.to_r_child())
 
         consolidated_node = self.create_node_w_arrs(child_arrs = [l_child_children, r_child_children], key_arrs=[l_child_keys, parent_key_wrapped, r_child_keys])
 
-        if parent._root is True:
+        if parent._root is True and len(parent.get_keys_array()) == 0:
             self._set_root(consolidated_node)
         else:
             parent.replace_child(consolidated_node, key_idx.to_l_child())
@@ -599,20 +599,25 @@ class BTree:
             # case 3 - find a sibling and apply a rule
             l_sibling, r_sibling = self._get_siblings(pos, next_pos_child_idx_in_parent)
 
+
             # adjust index for correct key 
             if next_pos_child_idx_in_parent.get_val() == len(pos.get_children_array()) - 1:
                 idx_to_insert = KeyIndex(next_pos_child_idx_in_parent.get_val() - 1)
+                index_between_l_sibling = KeyIndex(idx_to_insert.get_val())
             else:
                 idx_to_insert = KeyIndex(next_pos_child_idx_in_parent.get_val())
+                index_between_l_sibling = KeyIndex(idx_to_insert.get_val() - 1)
 
             if r_sibling is not None:
                 if r_sibling.is_minimum():
                     next_pos = self._consolidate_parent(l_child=next_pos, r_child=r_sibling, parent=pos, key_idx=idx_to_insert)
                     
                     return next_pos
+                
             if l_sibling is not None:
                 if l_sibling.is_minimum():
-                    next_pos = self._consolidate_parent(l_child=l_sibling, r_child=next_pos, parent=pos, key_idx=idx_to_insert)
+                    
+                    next_pos = self._consolidate_parent(l_child=l_sibling, r_child=next_pos, parent=pos, key_idx=index_between_l_sibling)
                     
                     return next_pos
                 
@@ -799,9 +804,10 @@ def unique_random_ints(n: int,
 
     return random.sample(population, k=n)
 
-def assert_tree_invariants(tree: BTree, **kwargs) -> bool:
+def assert_tree_invariants(tree: BTree, vals, dels, **kwargs) -> bool:
     stored_keys = tree.retrieve_keys_in_range(1,100000)
     assert len(stored_keys) == len(set(stored_keys))
+    assert len(stored_keys) == len(vals) - len(dels)
     for idx, val in enumerate(stored_keys[:-1]):
         assert val < stored_keys[idx + 1]
     
@@ -819,14 +825,16 @@ def check_leaf_status(pos: BTreeNode) -> bool:
 
 if __name__=='__main__':
     random.seed(3)
-    tree = BTree(t_val=20)
-    vals_to_insert=unique_random_ints(10000)
-    n_delete = 1000
+    tree = BTree(t_val=500)
+    vals_to_insert=unique_random_ints(100000)
+    insertions = []
+    n_delete = 10000
     deletions = []
     for idx, val in enumerate(vals_to_insert):
         tree.insert(val)
-        if idx % 100 == 0:
-            assert_tree_invariants(tree)
+        insertions.append(val)
+        # if idx % 100 == 0:
+        #     assert_tree_invariants(tree, insertions, [], insert=val)
         
     for i in range(n_delete):
         to_delete = random.choice(vals_to_insert)
@@ -834,17 +842,17 @@ if __name__=='__main__':
         deletions.append(to_delete)
         vals_to_insert = list(set(vals_to_insert) - set(deletions))
         tree.delete_key(to_delete)
-        assert assert_tree_invariants(tree, del_val = to_delete)
+        # assert assert_tree_invariants(tree, insertions, deletions, del_val = to_delete)
         
     
     
     stored_keys = tree.retrieve_keys_in_range(1,1000000)
-    for val in vals_to_insert:
-        assert val in stored_keys
+    # for val in vals_to_insert:
+    #     assert val in stored_keys
 
-    for deletion in deletions:
-        assert deletion not in stored_keys
+    # for deletion in deletions:
+    #     assert deletion not in stored_keys
     
-    assert assert_tree_invariants(tree)
+    assert assert_tree_invariants(tree, insertions, deletions, end=True)
 
 

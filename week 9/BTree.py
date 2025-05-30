@@ -2,6 +2,31 @@ from typing import Generic, TypeVar, Callable, List, Optional, Sequence, Iterabl
 from abc import abstractmethod
 import random
 
+def bisect_left(arr: list[int], key: int) -> int:
+    """ Returns the first index where value is larger than or equal to the key.
+    """
+    lo, hi = 0, len(arr)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if arr[mid] < key:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+def bisect_right(arr:list[int], key: int) -> int:
+    """ Returns the first index where the value is strictly larger than the key
+    """
+    lo, hi = 0, len(arr)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if arr[mid] <= key:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+
 class BTreeIndex:
     def __init__(self, val: int) -> None:
         self.val = val
@@ -59,65 +84,33 @@ class BTreeKeysArray:
         """ returns the idx that if done on an internal node, is where to travel,
             and if a leaf, is where to insert 
         """
-        # TODO: binary search
-        for idx, val in enumerate(self.arr):
-            if val > item:
-                return ChildIndex(idx)
-            else:
-                if idx == len(self) - 1:    # get to end of arr and item is biggest
-                    return ChildIndex(idx+1)
-
-        raise AssertionError('No travel index found')
+        return ChildIndex(bisect_right(self.get_arr(), item))
     
     def get_travel_deletion_idx(self, item: int) -> ChildIndex|KeyIndex:
         """ used during deletion during travel.
             returns ChildIndex if found direction to go, KeyIndex if key found
         """
-        for idx, val in enumerate(self.arr):
-            if val > item:
-                return ChildIndex(idx)
-            if val == item:
-                return KeyIndex(idx)
-            else:
-                if idx == len(self) - 1:    # get to end of arr and item is biggest
-                    return ChildIndex(idx+1)
+        arr = self.get_arr()
+        key_pos_idx = bisect_left(arr, item)
+        if key_pos_idx > len(arr) - 1:
+            return ChildIndex(key_pos_idx) # signals to keep travelling; implicitly adjusted for right child
+        if arr[key_pos_idx] > item:
+            return ChildIndex(key_pos_idx) # signals to keep travelling
+        if arr[key_pos_idx] == item:
+            return KeyIndex(key_pos_idx) # signals it was found
+        
 
         raise AssertionError('No travel index found')
     
     def get_insertion_location(self, item: int) -> KeyIndex:
         """ returns where key should go. This includes after the end of the current array
         """
-        # TODO: binary search
-        for idx, val in enumerate(self.arr):
-            if val > item:
-                return KeyIndex(idx)
-            else:
-                if idx == len(self) - 1:    # get to end of arr and item is biggest
-                    return KeyIndex(idx+1)
-                
-        if len(self.arr) == 0:
-            return KeyIndex(0)
+        return KeyIndex(bisect_right(self.get_arr(), item))
         
     def get_deletion_key_loc(self, item: int) -> KeyIndex:
-        """ returns where key could be, and where to travel if not. Used for deletion.
+        """ returns where key is found, used for deletion
         """
-        # TODO: binary search
-        for idx, val in enumerate(self.arr):
-            
-            if val == item:
-                return KeyIndex(idx)
-                
-        raise AssertionError('key not found in leaf')
-    
-    def get_key_idx(self, key: int) -> KeyIndex:
-        """ Returns the index at which the key is stored.
-        """
-        # TODO: binary search
-        for idx, val in enumerate(self.arr):
-            if val == key:
-                return KeyIndex(idx)
-            
-        raise AssertionError('Key not found in array')
+        return KeyIndex(bisect_left(self.get_arr(), item))
     
     def __getitem__(self, idx: KeyIndex) -> int:
         assert isinstance(idx, KeyIndex)
@@ -825,10 +818,10 @@ def check_leaf_status(pos: BTreeNode) -> bool:
 
 if __name__=='__main__':
     random.seed(3)
-    tree = BTree(t_val=500)
-    vals_to_insert=unique_random_ints(100000)
+    tree = BTree(t_val=50)
+    vals_to_insert=unique_random_ints(1000)
     insertions = []
-    n_delete = 10000
+    n_delete = 100
     deletions = []
     for idx, val in enumerate(vals_to_insert):
         tree.insert(val)
@@ -847,11 +840,11 @@ if __name__=='__main__':
     
     
     stored_keys = tree.retrieve_keys_in_range(1,1000000)
-    # for val in vals_to_insert:
-    #     assert val in stored_keys
+    for val in vals_to_insert:
+        assert val in stored_keys
 
-    # for deletion in deletions:
-    #     assert deletion not in stored_keys
+    for deletion in deletions:
+        assert deletion not in stored_keys
     
     assert assert_tree_invariants(tree, insertions, deletions, end=True)
 

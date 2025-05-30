@@ -196,21 +196,6 @@ class BTreeChildrenArray:
         """
         new_arr = self.get_arr()[0:idx] + [child] + self.get_arr()[idx:]
         self.set_arr(new_arr)
-        # # TODO: implement
-        # new_arr = []
-        # for arrs_idx, (child, idx) in enumerate(zip(children.get_arr(), idxs)):   #
-        #     if arrs_idx == 0:
-        #         if arrs_idx == len(children) - 1:
-        #             new_arr += self.get_arr()[0:idx] + [child] + self.get_arr()[idx:]
-        #         else:
-        #             new_arr += self.get_arr()[0:idx] + [child] + self.get_arr()[idx:arrs_idx + 1]
-            
-        #     if arrs_idx == len(children) - 1:
-        #         new_arr += [child] + self.get_arr()[idx:]
-        #     else:
-        #         new_arr += [child] + self.get_arr()[idx:arrs_idx + 1]
-        
-        self.set_arr(new_arr)
 
     def __add__(self, other_arr: 'BTreeChildrenArray|list[BTreeNode]') -> 'BTreeChildrenArray':
         if isinstance(other_arr, BTreeChildrenArray):
@@ -691,9 +676,8 @@ class BTree:
 
 
     def create_node_w_arrs(self, child_arrs: list[BTreeChildrenArray|BTreeNode], key_arrs: list[BTreeKeysArray|int]) -> BTreeNode:
-        """ Creates a child node at the 
+        """ Creates a Node using children and keys in order. Used during deletion consolidate/ case 2c
         """
-        # TODO: FIX THIS
         new_child_arr = []
         for arr in child_arrs:
             new_child_arr += arr
